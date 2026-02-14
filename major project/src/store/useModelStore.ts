@@ -26,7 +26,8 @@ interface ModelState {
   network: NetworkState
   training: TrainingState
 
-  uploadData: (file: File | string) => Promise<void>
+  uploadData: (file: File | string, cleaned?: boolean) => Promise<void>
+  setDatasetCleaned: (cleaned: boolean) => void
   cleanData: (method?: 'dropna' | 'normalize') => void
   updateWeight: (factor?: number) => void
   trainStep: () => void
@@ -62,7 +63,7 @@ export const useModelStore = create<ModelState>((set, get) => ({
   network: { layers: [1], weights: [[[0]]], biases: [[0]] },
   training: { epoch: 0, loss: 1.0, accuracy: [], lr: 0.01 },
 
-  uploadData: async (file) => {
+  uploadData: async (file, cleaned = false) => {
     let text = ''
     if (typeof file === 'string') {
       text = file
@@ -70,7 +71,12 @@ export const useModelStore = create<ModelState>((set, get) => ({
       text = await file.text()
     }
     const parsed = parseCSV(text)
-    set({ dataset: { data: parsed.data, labels: parsed.labels, cleaned: false } })
+    set({ dataset: { data: parsed.data, labels: parsed.labels, cleaned } })
+  },
+
+  setDatasetCleaned: (cleaned: boolean) => {
+    const s = get()
+    set({ dataset: { ...s.dataset, cleaned } })
   },
 
   cleanData: (method = 'dropna') => {

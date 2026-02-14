@@ -1,4 +1,4 @@
-import CSVUploader from './components/CSVUploader';
+import DataPanel from './components/DataPanel';
 import LossChart from './components/LossChart';
 import LossScene from './components/LossScene';
 import StoreTester from './components/StoreTester';
@@ -9,7 +9,7 @@ export default function Dashboard() {
       {/* Left: Data upload */}
       <aside style={{width: 300, minWidth: 220, borderRight: '1px solid #e6e6e6', paddingRight: 12}}>
         <h2>Data Upload</h2>
-        <CSVUploader />
+        <DataPanel />
       </aside>
 
       {/* Center: Network viz + charts */}
