@@ -1,4 +1,3 @@
-import React from 'react'
 import { useModelStore } from '../store/useModelStore'
 
 export default function StoreTester() {

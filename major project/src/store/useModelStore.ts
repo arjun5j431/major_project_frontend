@@ -1,11 +1,10 @@
-import { create } from "zustand"
-
-type Matrix = number[][]
+import { create } from 'zustand'
 
 interface DatasetState {
   data: number[][]
   labels: number[]
   cleaned: boolean
+  report?: any
 }
 
 interface NetworkState {
@@ -22,7 +21,7 @@ interface TrainingState {
 }
 
 interface ModelState {
-  dataset: DatasetState
+  dataset: DatasetState | { data: number[][]; labels: number[]; cleaned: boolean } | null
   network: NetworkState
   training: TrainingState
 
@@ -31,6 +30,7 @@ interface ModelState {
   cleanData: (method?: 'dropna' | 'normalize') => void
   updateWeight: (factor?: number) => void
   trainStep: () => void
+  preprocessData?: (csvFile: File) => Promise<void>
 }
 
 function parseCSV(text: string): { data: number[][]; labels: number[] } {
@@ -49,7 +49,6 @@ function parseCSV(text: string): { data: number[][]; labels: number[] } {
       return Number.isNaN(n) ? NaN : n
     })
     if (nums.length === 0) continue
-    // assume last column is label
     const label = nums[nums.length - 1]
     labels.push(label)
     data.push(nums.slice(0, nums.length - 1))
@@ -76,13 +75,15 @@ export const useModelStore = create<ModelState>((set, get) => ({
 
   setDatasetCleaned: (cleaned: boolean) => {
     const s = get()
-    set({ dataset: { ...s.dataset, cleaned } })
+    set({ dataset: { ...(s.dataset as any), cleaned } })
   },
 
   cleanData: (method = 'dropna') => {
     const s = get()
-    const { data, labels } = s.dataset
-    if (data.length === 0) return
+    const ds = s.dataset as any
+    if (!ds || !ds.data || ds.data.length === 0) return
+    const data: number[][] = ds.data
+    const labels: number[] = ds.labels || []
     if (method === 'dropna') {
       const filteredData: number[][] = []
       const filteredLabels: number[] = []
@@ -94,50 +95,73 @@ export const useModelStore = create<ModelState>((set, get) => ({
       }
       set({ dataset: { data: filteredData, labels: filteredLabels, cleaned: true } })
     } else if (method === 'normalize') {
-      // min-max normalize each column
-      const cols = s.dataset.data[0]?.length || 0
+      const cols = data[0]?.length || 0
       const mins: number[] = Array(cols).fill(Infinity)
       const maxs: number[] = Array(cols).fill(-Infinity)
-      for (const row of s.dataset.data) {
+      for (const row of data) {
         for (let j = 0; j < cols; j++) {
           const v = row[j]
           if (v < mins[j]) mins[j] = v
           if (v > maxs[j]) maxs[j] = v
         }
       }
-      const normed = s.dataset.data.map((row) =>
-        row.map((v, j) => (maxs[j] === mins[j] ? 0 : (v - mins[j]) / (maxs[j] - mins[j])))
-      )
-      set({ dataset: { data: normed, labels: s.dataset.labels.slice(), cleaned: true } })
+      const normed = data.map((row) => row.map((v, j) => (maxs[j] === mins[j] ? 0 : (v - mins[j]) / (maxs[j] - mins[j]))))
+      set({ dataset: { data: normed, labels: labels.slice(), cleaned: true } })
     }
   },
 
   updateWeight: (factor = 0.01) => {
     const s = get()
     const net = s.network
-    const newWeights = net.weights.map((layer) =>
-      layer.map((row) => row.map((w) => w + (Math.random() - 0.5) * factor))
-    )
+    const newWeights = net.weights.map((layer) => layer.map((row) => row.map((w) => w + (Math.random() - 0.5) * factor)))
     set({ network: { ...net, weights: newWeights } })
   },
 
   trainStep: () => {
     const s = get()
-    const ds = s.dataset
+    const ds = s.dataset as any
     const tr = s.training
-
-    // if no data, do nothing
-    if (ds.data.length === 0) return
-
-    // simple simulated training step: slightly reduce loss, bump epoch and accuracy
+    if (!ds || !ds.data || ds.data.length === 0) return
     const lr = tr.lr
     const newLoss = Math.max(0, tr.loss - lr * (0.1 + Math.random() * 0.2))
-    const accSample = Math.min(1, ( (1 - newLoss) + (Math.random()*0.05) ))
-    const newAcc = [...tr.accuracy, Number((accSample).toFixed(4))]
-
+    const accSample = Math.min(1, (1 - newLoss) + Math.random() * 0.05)
+    const newAcc = [...tr.accuracy, Number(accSample.toFixed(4))]
     set({ training: { ...tr, epoch: tr.epoch + 1, loss: newLoss, accuracy: newAcc } })
-
-    // nudge weights as if a gradient step happened
     get().updateWeight(lr * 0.1)
   },
+
+  preprocessData: async (csvFile: File) => {
+    // Try FastAPI Python service first (http://localhost:8000/preprocess), else fallback to Node /api/preprocess
+    try {
+      const form = new FormData()
+      form.append('file', csvFile)
+      const resp = await fetch('http://localhost:8000/preprocess', {
+        method: 'POST',
+        body: form,
+      })
+      if (resp.ok) {
+        const json = await resp.json()
+        set({ dataset: { data: [], labels: [], cleaned: true, report: json } })
+        return
+      }
+    } catch (err) {
+      console.warn('FastAPI preprocess failed, falling back to Node', err)
+    }
+
+    // fallback to existing Node endpoint
+    try {
+      const csvContent = await csvFile.text()
+      const response = await fetch('/api/preprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csvContent }),
+      })
+      const { data, labels, report } = await response.json()
+      set({ dataset: { data, labels, cleaned: true, report } })
+    } catch (err) {
+      console.warn('preprocessData all backends failed', err)
+    }
+  },
 }))
+
+export default useModelStore

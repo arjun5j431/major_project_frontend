@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber"
 import { OrbitControls } from "@react-three/drei"
-import * as THREE from "three"
+// three is available via @react-three/fiber; explicit import not needed here
 
 function LossSurface() {
   return (

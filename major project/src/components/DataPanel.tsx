@@ -1,13 +1,13 @@
 import React, { useCallback, useState } from 'react'
 import Papa from 'papaparse'
-import { useModelStore } from '../store/useModelStore'
+import useModelStore from '../store/useModelStore'
 
 type Row = Record<string, any>
 
 export default function DataPanel() {
   const uploadData = useModelStore((s) => s.uploadData)
   const setDatasetCleaned = useModelStore((s) => s.setDatasetCleaned)
-  const cleanedFlag = useModelStore((s) => s.dataset.cleaned)
+  const cleanedFlag = useModelStore((s) => (s.dataset ? (s.dataset as any).cleaned : false))
   const [rows, setRows] = useState<Row[]>([])
   const [originalRows, setOriginalRows] = useState<Row[]>([])
   const [headers, setHeaders] = useState<string[]>([])
@@ -102,20 +102,7 @@ export default function DataPanel() {
     setDatasetCleaned(true)
   }
 
-  function previewCSV() {
-    if (!headers.length) return ''
-    const lines = [headers.join(',')]
-    for (const r of rows) {
-      const vals = headers.map(h => {
-        const v = r[h]
-        if (v === null || v === undefined) return ''
-        return String(v)
-      })
-      lines.push(vals.join(','))
-      if (lines.length > 11) break
-    }
-    return lines.join('\n')
-  }
+  // previewCSV removed (unused). Use previewCSVAll() or table preview instead.
 
   // commit current preview to central store by building CSV string
   async function commitToStore() {
